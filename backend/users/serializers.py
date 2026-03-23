@@ -39,22 +39,22 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 
 class UserPublicSerializer(serializers.ModelSerializer):
-    """
-    Used when showing author info on questions and answers.
-    Only exposes safe public fields.
-    """
     class Meta:
         model  = User
         fields = ['id', 'username', 'verification_status']
 
 
 class UserProfileSerializer(serializers.ModelSerializer):
-    """
-    Used for viewing and updating the logged-in user's own profile.
-    """
+    # Write-only field, not stored directly
+    current_password = serializers.CharField(write_only=True, required=False)
+
     class Meta:
         model  = User
-        fields = ['id', 'username', 'email', 'verification_status', 'date_joined']
+        fields = [
+            'id', 'username', 'email',
+            'verification_status', 'date_joined',
+            'current_password',               # ← added
+        ]
         read_only_fields = ['id', 'verification_status', 'date_joined']
 
     def validate_email(self, value):
@@ -69,6 +69,31 @@ class UserProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('This username is already taken.')
         return value
 
+    def validate(self, data):
+        user = self.context['request'].user
+
+        # If username or email is being changed, require current password
+        username_changed = 'username' in data and data['username'] != user.username
+        email_changed    = 'email'    in data and data['email']    != user.email
+
+        if username_changed or email_changed:
+            current_password = data.get('current_password', '')
+            if not current_password:
+                raise serializers.ValidationError({
+                    'current_password': 'Please enter your current password to save changes.'
+                })
+            if not user.check_password(current_password):
+                raise serializers.ValidationError({
+                    'current_password': 'Incorrect password. Please try again.'
+                })
+
+        return data
+
+    def update(self, instance, validated_data):
+        # Remove current_password before saving, it's not a model field
+        validated_data.pop('current_password', None)
+        return super().update(instance, validated_data)
+
 
 class VerificationRequestSerializer(serializers.ModelSerializer):
     class Meta:
@@ -77,10 +102,8 @@ class VerificationRequestSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'status', 'submitted_at']
 
     def validate_id_card_image(self, value):
-        # Check file size (max 5MB)
         if value.size > 5 * 1024 * 1024:
             raise serializers.ValidationError('Image size must not exceed 5MB.')
-        # Check file type
         allowed_types = ['image/jpeg', 'image/jpg', 'image/png']
         if value.content_type not in allowed_types:
             raise serializers.ValidationError('Only JPG, JPEG and PNG files are allowed.')
