@@ -355,7 +355,7 @@ export default function QuestionDetailPage() {
           )}
 
           {/* Logged in but not verified */}
-          {user && !user.is_verified && (
+          {user && user.verification_status !== 'verified' &&  (
             <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex gap-3">
               <ShieldX size={18} className="text-amber-600 shrink-0 mt-0.5" />
               <div>
