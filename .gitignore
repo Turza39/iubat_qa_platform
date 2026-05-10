@@ -1,14 +1,52 @@
 # Python
 backend/.venv/
+backend/.venv3/
 backend/__pycache__/
 backend/*.pyc
 backend/.env
+fastapi_backend/.venv/
+fastapi_backend/__pycache__/
+fastapi_backend/*.pyc
+fastapi_backend/.env
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
 
 # Node
 frontend/node_modules/
 frontend/.next/
 frontend/.env.local
+frontend/.env
+frontend/build/
+frontend/dist/
+react_frontend/node_modules/
+react_frontend/.next/
+react_frontend/.env.local
+react_frontend/.env
 
-# OS
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Media/Uploads
+backend/media/
+fastapi_backend/media/
