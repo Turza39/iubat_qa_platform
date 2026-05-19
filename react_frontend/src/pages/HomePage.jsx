@@ -430,18 +430,24 @@ export default function HomePage() {
               <h3 className="font-semibold text-slate-700 text-sm">Browse by Tag</h3>
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {tags.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => handleTagClick(tag.slug)}
-                >
-                  <Badge
-                    variant={selectedTag === tag.slug ? 'verified' : 'tag'}
+              {tags.length > 0 ? (
+                tags.map((tag) => (
+                  <button
+                    key={tag.id}
+                    onClick={() => handleTagClick(tag.slug)}
                   >
-                    {tag.name}
-                  </Badge>
-                </button>
-              ))}
+                    <Badge
+                      variant={selectedTag === tag.slug ? 'verified' : 'tag'}
+                    >
+                      {tag.name}
+                    </Badge>
+                  </button>
+                ))
+              ) : (
+                <p className="text-xs text-slate-400">
+                  No tags available yet. Ask a question to generate tags.
+                </p>
+              )}
             </div>
           </div>
 

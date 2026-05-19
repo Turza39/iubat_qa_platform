@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const api = axios.create({
-  baseURL: 'http://localhost:8000/api',
+  baseURL: import.meta.env.VITE_API_URL || '/api',
   headers: {
     'Content-Type': 'application/json',
   },
@@ -34,6 +34,7 @@ api.interceptors.response.use(
   (error) => {
     const status = error.response?.status
     const url = error.response?.config?.url
+    const message = error.message
     
     if (status === 401) {
       console.error(`❌ 401 Unauthorized on ${url}`)
@@ -41,8 +42,10 @@ api.interceptors.response.use(
       localStorage.removeItem('access_token')
       localStorage.removeItem('refresh_token')
       window.location.href = '/login'
+    } else if (error.response) {
+      console.error(`❌ Response error ${status}:`, url, error.response.data)
     } else {
-      console.error(`❌ Response error ${status}:`, url, error.response?.data)
+      console.error(`❌ Network error for ${url}:`, message)
     }
     
     return Promise.reject(error)

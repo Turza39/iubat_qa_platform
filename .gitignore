@@ -54,3 +54,6 @@ fastapi_backend/media/
 
 # codeforces practice code
 cf_practice.py
+
+# secrets for docker-compose
+.env

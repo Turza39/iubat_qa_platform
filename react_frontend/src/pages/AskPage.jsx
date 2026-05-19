@@ -258,7 +258,7 @@ export default function AskPage() {
                   <Spinner size="sm" />
                   <span className="text-xs text-slate-400">Loading tags...</span>
                 </div>
-              ) : (
+              ) : tags.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tag) => {
                     const isSelected = formData.tag_ids.includes(tag.id)
@@ -282,6 +282,10 @@ export default function AskPage() {
                     )
                   })}
                 </div>
+              ) : (
+                <p className="text-xs text-slate-400">
+                  No tags available yet. Create a question with tags to populate this list.
+                </p>
               )}
 
               {/* Selected Tags Preview */}

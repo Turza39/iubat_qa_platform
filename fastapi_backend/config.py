@@ -1,3 +1,6 @@
+import json
+
+from pydantic import field_validator
 from pydantic_settings import BaseSettings
 from typing import Optional
 from datetime import timedelta
@@ -32,12 +35,16 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: list = ["localhost", "127.0.0.1"]
     
     # CORS Configuration
-    CORS_ALLOWED_ORIGINS: list = [
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:5173",  # Vite dev server
-        "http://127.0.0.1:5173",
-    ]
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
+
+    @property
+    def CORS_ALLOWED_ORIGINS_LIST(self) -> list[str]:
+        raw_value = self.CORS_ALLOWED_ORIGINS
+        if isinstance(raw_value, str):
+            return [item.strip() for item in raw_value.split(",") if item.strip()]
+        if isinstance(raw_value, list):
+            return [str(item) for item in raw_value]
+        return []
     
     # Media Files
     MEDIA_URL: str = "/media/"
@@ -69,10 +76,13 @@ class Settings(BaseSettings):
     
     # Timezone
     TIMEZONE: str = "Asia/Dhaka"
-    
-    class Config:
-        env_file = ".env"
-    
+
+    model_config = {
+        "env_parse_json": False,
+        "env_file": ".env",
+        "env_file_encoding": "utf-8",
+    }
+
     @property
     def DATABASE_URL(self) -> str:
         """Construct database URL based on configuration"""

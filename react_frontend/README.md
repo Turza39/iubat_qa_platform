@@ -99,18 +99,19 @@ src/
 
 ## 🔌 API Integration
 
-The frontend connects to the FastAPI backend at:
-```javascript
-http://127.0.0.1:8000/api
-```
+The frontend connects to the FastAPI backend through the same origin using the `/api` prefix.
+
+In Docker production, Nginx proxies `/api` to the internal backend service, so the browser never connects to port `8000` directly.
 
 Update the API URL in `src/lib/axios.js` for different environments:
 
 ```javascript
 const api = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000/api'
+  baseURL: import.meta.env.VITE_API_URL || '/api'
 })
 ```
+
+For local development with Vite, the proxy in `vite.config.js` forwards `/api` to `http://localhost:8000`.
 
 ### Key API Endpoints Used
 - `POST /users/register/` - User registration

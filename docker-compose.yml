@@ -1,0 +1,119 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: iubatqa_db
+    expose:
+      - "5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - backend_net
+
+  redis:
+    image: redis:7-alpine
+    container_name: iubatqa_redis
+    expose:
+      - "6379"
+    command: ["redis-server", "--save", "900", "1", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - backend_net
+
+  backend:
+    build:
+      context: ./fastapi_backend
+      dockerfile: Dockerfile
+    container_name: iubatqa_backend
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    # Ports removed for security: Only accessible via Nginx (frontend)
+    environment:
+      DB_ENGINE: postgresql
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      CORS_ALLOWED_ORIGINS: "http://localhost:5173,http://localhost:3000,http://frontend:80"
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      DEBUG: ${DEBUG}
+    command: ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4"]
+    restart: unless-stopped
+    networks:
+      - frontend_net
+      - backend_net
+
+  celery:
+    build:
+      context: ./fastapi_backend
+      dockerfile: Dockerfile
+    container_name: iubatqa_celery
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_ENGINE: postgresql
+      DB_NAME: ${POSTGRES_DB}
+      DB_USER: ${POSTGRES_USER}
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_HOST: db
+      DB_PORT: 5432
+      REDIS_URL: redis://redis:6379/0
+      CELERY_BROKER_URL: redis://redis:6379/1
+      CELERY_RESULT_BACKEND: redis://redis:6379/2
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: ${ALGORITHM}
+      DEBUG: ${DEBUG}
+    command: ["celery", "-A", "utils.celery_app.celery", "worker", "--loglevel=info", "--concurrency=2"]
+    restart: unless-stopped
+    networks:
+      - backend_net
+
+  frontend:
+    build:
+      context: ./react_frontend
+      dockerfile: Dockerfile
+    container_name: iubatqa_frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+    restart: unless-stopped
+    networks:
+      - frontend_net
+
+volumes:
+  db_data:
+  redis_data:
+
+networks:
+  frontend_net:
+    driver: bridge
+  backend_net:
+    driver: bridge

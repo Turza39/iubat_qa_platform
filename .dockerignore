@@ -1,0 +1,14 @@
+# Ignore local artifacts
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.venv/
+venv/
+fastapi_backend/venv/
+react_frontend/node_modules/
+react_frontend/dist/
+.git/
+.gitignore
+.DS_Store
