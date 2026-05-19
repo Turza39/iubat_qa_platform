@@ -16,7 +16,7 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 COPY . .
 
-RUN mkdir -p /app/media /app/static
+RUN mkdir -p /app/media
 
 EXPOSE 8000
 

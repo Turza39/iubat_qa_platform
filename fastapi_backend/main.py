@@ -62,14 +62,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create media and static directories if they don't exist
+# Create media directory if it doesn't exist (used for uploads)
 os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
-os.makedirs(settings.STATIC_ROOT, exist_ok=True)
 
-# Mount static files
-app.mount("/static", StaticFiles(directory=settings.STATIC_ROOT), name="static")
-
-# Mount media files
+# Mount media files (verification uploads and other user media)
 app.mount("/media", StaticFiles(directory=settings.MEDIA_ROOT), name="media")
 
 

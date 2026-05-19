@@ -14,7 +14,7 @@ export default function AskPage() {
   const [formData, setFormData] = useState({
     title: '',
     body: '',
-    tag_ids: [],
+    tags: [],
   })
 
   const [tags, setTags] = useState([])
@@ -53,17 +53,17 @@ export default function AskPage() {
     }
   }
 
-  const handleTagToggle = (tagId) => {
+  const handleTagToggle = (tagSlug) => {
     setFormData(prev => {
-      const already = prev.tag_ids.includes(tagId)
+      const already = prev.tags.includes(tagSlug)
       if (already) {
-        return { ...prev, tag_ids: prev.tag_ids.filter(id => id !== tagId) }
+        return { ...prev, tags: prev.tags.filter(tag => tag !== tagSlug) }
       }
-      if (prev.tag_ids.length >= 5) {
+      if (prev.tags.length >= 5) {
         toast.error('You can select a maximum of 5 tags.')
         return prev
       }
-      return { ...prev, tag_ids: [...prev.tag_ids, tagId] }
+      return { ...prev, tags: [...prev.tags, tagSlug] }
     })
   }
 
@@ -242,10 +242,10 @@ export default function AskPage() {
                   Tags
                   <span className="text-xs font-normal text-slate-400">(optional, max 5)</span>
                 </label>
-                {formData.tag_ids.length > 0 && (
+                {formData.tags.length > 0 && (
                   <button
                     type="button"
-                    onClick={() => setFormData(prev => ({ ...prev, tag_ids: [] }))}
+                    onClick={() => setFormData(prev => ({ ...prev, tags: [] }))}
                     className="text-xs text-slate-400 hover:text-red-500 transition-colors"
                   >
                     Clear all
@@ -261,12 +261,12 @@ export default function AskPage() {
               ) : tags.length > 0 ? (
                 <div className="flex flex-wrap gap-2">
                   {tags.map((tag) => {
-                    const isSelected = formData.tag_ids.includes(tag.id)
+                    const isSelected = formData.tags.includes(tag.slug)
                     return (
                       <button
                         key={tag.id}
                         type="button"
-                        onClick={() => handleTagToggle(tag.id)}
+                        onClick={() => handleTagToggle(tag.slug)}
                         className={`
                           flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium
                           border transition-all duration-150
@@ -289,9 +289,9 @@ export default function AskPage() {
               )}
 
               {/* Selected Tags Preview */}
-              {formData.tag_ids.length > 0 && (
+              {formData.tags.length > 0 && (
                 <p className="text-xs text-slate-400">
-                  {formData.tag_ids.length} tag{formData.tag_ids.length > 1 ? 's' : ''} selected
+                  {formData.tags.length} tag{formData.tags.length > 1 ? 's' : ''} selected
                 </p>
               )}
             </div>

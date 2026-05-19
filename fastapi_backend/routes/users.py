@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import func
 from typing import Optional
 import os
+import re
 from datetime import datetime
 
 from database import get_db
@@ -437,7 +438,8 @@ async def check_verification_status(
 )
 async def submit_verification(
     current_user: User = Depends(get_current_user),
-    file: UploadFile = File(...),
+    file: UploadFile = File(None),
+    id_card_image: UploadFile = File(None),
     db: Session = Depends(get_db)
 ):
     """
@@ -466,12 +468,47 @@ async def submit_verification(
             detail="Your verification request is already under review"
         )
     
-    # Validate file type
-    allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
-    if file.content_type not in allowed_types:
+    # Validate file type and extension
+    allowed_mimetypes = {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+        "application/msword",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    }
+    allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".doc", ".docx"}
+
+    # Frontend sends the file under the field name `id_card_image`.
+    upload_file = id_card_image or file
+    if upload_file is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only JPEG, PNG, GIF, and WebP images are allowed"
+            detail="No file provided"
+        )
+
+    filename = upload_file.filename or "upload"
+    _, ext = os.path.splitext(filename.lower())
+
+    if upload_file.content_type not in allowed_mimetypes or ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Only image (jpg/png/gif/webp), PDF, and DOC/DOCX files are allowed"
+        )
+
+    # Enforce maximum upload size (5 MiB)
+    MAX_FILE_SIZE = 5 * 1024 * 1024
+    contents = await upload_file.read()
+    if len(contents) == 0:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="No file provided or file is empty"
+        )
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Uploaded file is too large (max 5 MiB)"
         )
     
     try:
@@ -479,15 +516,13 @@ async def submit_verification(
         media_dir = os.path.join(settings.MEDIA_ROOT, "verification_images")
         os.makedirs(media_dir, exist_ok=True)
         
-        # Save file
-        timestamp = datetime.utcnow().timestamp()
-        file_path = os.path.join(
-            media_dir,
-            f"{current_user.id}_{timestamp}_{file.filename}"
-        )
-        
+        # Sanitize filename and save file
+        # Keep only safe characters in filename to avoid path injection
+        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename))
+        timestamp = int(datetime.utcnow().timestamp())
+        file_path = os.path.join(media_dir, f"{current_user.id}_{timestamp}_{safe_name}")
+
         with open(file_path, "wb") as f:
-            contents = await file.read()
             f.write(contents)
         
         # Create or update verification request using SQLAlchemy

@@ -25,8 +25,8 @@ router = APIRouter(prefix="/api/questions", tags=["questions"])
 
 def resolve_tags(db: Session, tag_names: list[str]) -> list[Tag]:
     """
-    Resolve tag names to Tag objects using a single query for existing tags,
-    and create missing tags.
+    Resolve tag names or legacy numeric tag IDs to Tag objects.
+    Use a single query for existing tags and create missing tags.
     """
     if not tag_names:
         return []
@@ -39,29 +39,59 @@ def resolve_tags(db: Session, tag_names: list[str]) -> list[Tag]:
 
     cleaned_slugs = []
     slug_to_name = {}
+    tag_ids = []
+    unique_ids = set()
 
     for tag_name in tag_names:
-        tag_name = tag_name.strip()
+        if tag_name is None:
+            continue
 
-        if not tag_name or len(tag_name) > 50:
+        raw_value = str(tag_name).strip()
+        if not raw_value or len(raw_value) > 50:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Tag name must be between 1 and 50 characters."
             )
 
-        slug = create_slug(tag_name)
+        if raw_value.isdigit():
+            tag_id = int(raw_value)
+            if tag_id not in unique_ids:
+                unique_ids.add(tag_id)
+                tag_ids.append(tag_id)
+            continue
 
+        slug = create_slug(raw_value)
         if slug not in slug_to_name:
             cleaned_slugs.append(slug)
-            slug_to_name[slug] = tag_name
+            slug_to_name[slug] = raw_value
 
-    existing_tags = db.query(Tag).filter(Tag.slug.in_(cleaned_slugs)).all()
-    existing_map = {tag.slug: tag for tag in existing_tags}
+    conditions = []
+    if cleaned_slugs:
+        conditions.append(Tag.slug.in_(cleaned_slugs))
+    if tag_ids:
+        conditions.append(Tag.id.in_(tag_ids))
 
-    result_tags = list(existing_tags)
+    existing_tags = []
+    if conditions:
+        existing_tags = db.query(Tag).filter(or_(*conditions)).all()
+
+    existing_slug_map = {tag.slug: tag for tag in existing_tags}
+    existing_id_map = {tag.id: tag for tag in existing_tags}
+
+    result_tags = []
+
+    for tag_id in tag_ids:
+        if tag_id not in existing_id_map:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid tag ID: {tag_id}"
+            )
+        result_tags.append(existing_id_map[tag_id])
 
     for slug in cleaned_slugs:
-        if slug not in existing_map:
+        if slug in existing_slug_map:
+            result_tags.append(existing_slug_map[slug])
+        else:
             new_tag = Tag(name=slug_to_name[slug], slug=slug)
             db.add(new_tag)
             db.flush()

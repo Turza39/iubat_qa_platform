@@ -63,6 +63,8 @@ services:
       DEBUG: ${DEBUG}
     command: ["sh", "-c", "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4"]
     restart: unless-stopped
+    volumes:
+      - ./fastapi_backend/media:/app/media
     networks:
       - frontend_net
       - backend_net
@@ -90,8 +92,17 @@ services:
       SECRET_KEY: ${SECRET_KEY}
       ALGORITHM: ${ALGORITHM}
       DEBUG: ${DEBUG}
-    command: ["celery", "-A", "utils.celery_app.celery", "worker", "--loglevel=info", "--concurrency=2"]
+    command: [
+      "celery",
+      "-A",
+      "utils.celery_app.celery",
+      "worker",
+      "--loglevel=info",
+      "--concurrency=2",
+    ]
     restart: unless-stopped
+    volumes:
+      - ./fastapi_backend/media:/app/media
     networks:
       - backend_net
 
