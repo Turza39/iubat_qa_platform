@@ -40,3 +40,19 @@ class Question(Base):
     
     def __str__(self):
         return self.title
+
+    @property
+    def upvote_count(self):
+        """Computed number of votes for this question."""
+        try:
+            return len(self.votes or [])
+        except Exception:
+            return 0
+
+    @property
+    def answer_count(self):
+        """Computed number of answers for this question."""
+        try:
+            return len(self.answers or [])
+        except Exception:
+            return 0

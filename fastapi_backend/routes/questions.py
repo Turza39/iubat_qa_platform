@@ -16,6 +16,9 @@ from schemas.question import (
 )
 from dependencies.auth import get_current_user
 from utils.password import create_slug
+from config import settings
+from utils.redis_cache import get_cached_json, set_cached_json, delete_pattern
+from utils.tasks import publish_activity_event
 
 router = APIRouter(prefix="/api/questions", tags=["questions"])
 
@@ -69,8 +72,18 @@ def resolve_tags(db: Session, tag_names: list[str]) -> list[Tag]:
 
 @router.get("/tags/", response_model=list[TagListSchema])
 async def list_tags(db: Session = Depends(get_db)):
+    cache_key = "tags:list"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
+
     tags = db.query(Tag).order_by(Tag.name.asc()).all()
-    return tags
+    response = [
+        {"id": tag.id, "name": tag.name, "slug": tag.slug}
+        for tag in tags
+    ]
+    await set_cached_json(cache_key, response, settings.CACHE_TTL_TAGS)
+    return response
 
 
 @router.get("/", response_model=list[QuestionListSchema])
@@ -78,7 +91,7 @@ async def list_questions(
     search: str = Query(None, description="Search in title or body"),
     tag: str = Query(None, description="Filter by tag slug"),
     skip: int = Query(0, ge=0),
-    limit: int = Query(100, ge=1, le=1000),
+    limit: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db)
 ):
     """
@@ -87,6 +100,11 @@ async def list_questions(
     - bulk counts votes/answers
     - avoids len(q.votes), len(q.answers)
     """
+    cache_key = f"questions:list:search={search or ''}:tag={tag or ''}:skip={skip}:limit={limit}"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
+
     query = db.query(Question).options(
         joinedload(Question.author),
         selectinload(Question.tags)
@@ -148,6 +166,7 @@ async def list_questions(
             "created_at": q.created_at,
         })
 
+    await set_cached_json(cache_key, result, settings.CACHE_TTL_QUESTION_LIST)
     return result
 
 
@@ -171,6 +190,14 @@ async def create_question(
     db.add(question)
     db.commit()
     db.refresh(question)
+
+    await delete_pattern("questions:list:*")
+    await delete_pattern("question:detail:*")
+    await delete_pattern("answers:list:*")
+    publish_activity_event.delay("question.created", {
+        "question_id": question.id,
+        "author_id": current_user.id,
+    })
 
     return {
         "id": question.id,
@@ -215,6 +242,11 @@ async def get_question_detail(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question not found."
         )
+
+    cache_key = f"question:detail:{question_id}:skip={answer_skip}:limit={answer_limit}"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
 
     answers = (
         db.query(Answer)
@@ -280,7 +312,7 @@ async def get_question_detail(
         "updated_at": question.updated_at,
     }
 
-    return {
+    response = {
         "question": question_data,
         "answers": answer_list,
         "answers_pagination": {
@@ -290,6 +322,8 @@ async def get_question_detail(
             "total": total_answer_count,
         }
     }
+    await set_cached_json(cache_key, response, settings.CACHE_TTL_QUESTION_DETAIL)
+    return response
 
 
 @router.put("/{question_id}/")
@@ -329,6 +363,14 @@ async def update_question(
 
     db.commit()
     db.refresh(question)
+
+    await delete_pattern("questions:list:*")
+    await delete_pattern("question:detail:*")
+    await delete_pattern("answers:list:*")
+    publish_activity_event.delay("question.updated", {
+        "question_id": question.id,
+        "author_id": current_user.id,
+    })
 
     upvote_count = (
         db.query(func.count(Vote.id))
@@ -380,5 +422,13 @@ async def delete_question(
 
     db.delete(question)
     db.commit()
+
+    await delete_pattern("questions:list:*")
+    await delete_pattern("question:detail:*")
+    await delete_pattern("answers:list:*")
+    publish_activity_event.delay("question.deleted", {
+        "question_id": question_id,
+        "author_id": current_user.id,
+    })
 
     return {"detail": "Question deleted successfully."}

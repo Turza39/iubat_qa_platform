@@ -33,22 +33,47 @@ export default function QuestionDetailPage() {
   const [submitting, setSubmitting]     = useState(false);
   const [votingId, setVotingId]         = useState(null);
   const [votingType, setVotingType]     = useState(null);
+  const [answerPage, setAnswerPage]     = useState(0);
+  const [hasMoreAnswers, setHasMoreAnswers] = useState(false);
+  const [loadingMoreAnswers, setLoadingMoreAnswers] = useState(false);
 
   useEffect(() => {
-    fetchQuestionDetail();
+    setAnswerPage(0);
   }, [id]);
 
-  const fetchQuestionDetail = async () => {
+  useEffect(() => {
+    fetchQuestionDetail(answerPage);
+  }, [id, answerPage]);
+
+  const fetchQuestionDetail = async (pageToFetch) => {
+    const limit = 5;
+    const skip = pageToFetch * limit;
+
     try {
-      setLoading(true);
-      const data = await questionService.getQuestionDetail(id);
+      if (pageToFetch === 0) {
+        setLoading(true);
+      } else {
+        setLoadingMoreAnswers(true);
+      }
+
+      const data = await questionService.getQuestionDetail(id, skip, limit);
       setQuestion(data.question);
-      setAnswers(data.answers);
+
+      if (pageToFetch === 0) {
+        setAnswers(data.answers);
+      } else {
+        setAnswers(prev => [...prev, ...data.answers]);
+      }
+
+      setHasMoreAnswers(data.answers_pagination.returned === limit);
     } catch (error) {
       toast.error('Failed to load question.');
-      navigate('/');
+      if (pageToFetch === 0) {
+        navigate('/');
+      }
     } finally {
       setLoading(false);
+      setLoadingMoreAnswers(false);
     }
   };
 
@@ -317,6 +342,19 @@ export default function QuestionDetailPage() {
                   </div>
                 </div>
               ))}
+
+              {hasMoreAnswers && (
+                <div className="flex justify-center mt-4">
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={() => setAnswerPage(prev => prev + 1)}
+                    disabled={loadingMoreAnswers}
+                  >
+                    {loadingMoreAnswers ? 'Loading more answers...' : 'Load more answers'}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>

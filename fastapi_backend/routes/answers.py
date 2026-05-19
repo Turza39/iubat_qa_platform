@@ -9,6 +9,9 @@ from models.question import Question
 from models.vote import Vote
 from schemas.answer import AnswerCreateSchema, AnswerUpdateSchema
 from dependencies.auth import get_verified_user
+from config import settings
+from utils.redis_cache import get_cached_json, set_cached_json, delete_pattern
+from utils.tasks import publish_activity_event
 
 router = APIRouter(prefix="/api/answers", tags=["answers"])
 
@@ -37,6 +40,14 @@ async def post_answer(
     db.commit()
     db.refresh(answer)
 
+    await delete_pattern(f"answers:list:{question_id}:*")
+    await delete_pattern("question:detail:*")
+    publish_activity_event.delay("answer.created", {
+        "answer_id": answer.id,
+        "question_id": question_id,
+        "author_id": current_user.id,
+    })
+
     return {
         "id": answer.id,
         "body": answer.body,
@@ -55,7 +66,7 @@ async def post_answer(
 async def get_answers(
     question_id: int,
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 5,
     db: Session = Depends(get_db)
 ):
     question = db.query(Question).filter(Question.id == question_id).first()
@@ -64,6 +75,11 @@ async def get_answers(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Question not found."
         )
+
+    cache_key = f"answers:list:{question_id}:skip={skip}:limit={limit}"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
 
     answers = (
         db.query(Answer)
@@ -102,6 +118,7 @@ async def get_answers(
             "updated_at": answer.updated_at,
         })
 
+    await set_cached_json(cache_key, result, settings.CACHE_TTL_ANSWER_LIST)
     return result
 
 
@@ -131,6 +148,14 @@ async def update_answer(
     answer.body = answer_data.body
     db.commit()
     db.refresh(answer)
+
+    await delete_pattern(f"answers:list:{question_id}:*")
+    await delete_pattern("question:detail:*")
+    publish_activity_event.delay("answer.updated", {
+        "answer_id": answer.id,
+        "question_id": question_id,
+        "author_id": current_user.id,
+    })
 
     upvote_count = (
         db.query(func.count(Vote.id))
@@ -171,5 +196,13 @@ async def delete_answer(
 
     db.delete(answer)
     db.commit()
+
+    await delete_pattern(f"answers:list:{question_id}:*")
+    await delete_pattern("question:detail:*")
+    publish_activity_event.delay("answer.deleted", {
+        "answer_id": answer.id,
+        "question_id": question_id,
+        "author_id": current_user.id,
+    })
 
     return {"detail": "Answer deleted successfully"}

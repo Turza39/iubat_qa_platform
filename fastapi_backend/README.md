@@ -246,6 +246,18 @@ STATIC_URL=/static/
 # APPLICATION SETTINGS
 # ============================================================
 TIMEZONE=Asia/Dhaka
+
+# Redis and Celery
+REDIS_URL=redis://localhost:6379/0
+CELERY_BROKER_URL=redis://localhost:6379/1
+CELERY_RESULT_BACKEND=redis://localhost:6379/2
+
+# Optional SMTP configuration for async background emails
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USERNAME=
+SMTP_PASSWORD=
+SMTP_FROM_EMAIL=no-reply@iubatqa.local
 ```
 
 ### Configuration Priority
@@ -267,6 +279,14 @@ uvicorn main:app --reload
 - Auto-reloads when you save files
 - Debug mode enabled
 - Access at: `http://localhost:8000`
+
+### Start Celery Worker
+
+Run Celery side-by-side with the app for async background tasks and Redis queue handling:
+
+```bash
+celery -A celery_app.celery worker --loglevel=info
+```
 
 ### Custom Host/Port
 

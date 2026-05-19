@@ -5,6 +5,7 @@ from database import Base, engine
 from routes import answers_router, questions_router, users_router, votes_router
 from models import User, Question, Answer, Vote, Tag, VerificationRequest
 from config import settings
+from utils.redis_cache import get_async_redis
 import os
 
 # Create all database tables
@@ -35,6 +36,17 @@ app.mount("/static", StaticFiles(directory=settings.STATIC_ROOT), name="static")
 
 # Mount media files
 app.mount("/media", StaticFiles(directory=settings.MEDIA_ROOT), name="media")
+
+
+@app.on_event("startup")
+async def startup():
+    try:
+        redis_client = await get_async_redis()
+        await redis_client.ping()
+    except Exception:
+        # Allow the app to start even if Redis is temporarily unavailable.
+        # Startup will log the failure via the worker / API logs.
+        pass
 
 # Include routers
 app.include_router(users_router)

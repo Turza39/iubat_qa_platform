@@ -6,6 +6,7 @@ backend/*.pyc
 backend/.env
 fastapi_backend/.venv/
 fastapi_backend/__pycache__/
+fastapi_backend/.claude/
 fastapi_backend/*.pyc
 fastapi_backend/.env
 .venv/

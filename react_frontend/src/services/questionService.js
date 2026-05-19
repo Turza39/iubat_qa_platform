@@ -1,16 +1,17 @@
 import api from '@/lib/axios'
 
 export const questionService = {
-  getAllQuestions: async (search = '', tag = '') => {
-    const params = {}
+  getAllQuestions: async (search = '', tag = '', skip = 0, limit = 20) => {
+    const params = { skip, limit }
     if (search) params.search = search
     if (tag) params.tag = tag
     const response = await api.get('/questions/', { params })
     return response.data
   },
 
-  getQuestionDetail: async (id) => {
-    const response = await api.get(`/questions/${id}/`)
+  getQuestionDetail: async (id, skip = 0, limit = 5) => {
+    const params = { skip, limit }
+    const response = await api.get(`/questions/${id}/`, { params })
     return response.data
   },
 

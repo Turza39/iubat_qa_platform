@@ -1,7 +1,10 @@
 from pydantic import BaseModel, EmailStr, Field
 from datetime import datetime
-from typing import Optional, List
+from typing import Optional, List, TYPE_CHECKING
 from enum import Enum
+
+if TYPE_CHECKING:
+    from schemas.question import QuestionListSchema
 
 
 class VerificationStatusEnum(str, Enum):
@@ -110,6 +113,7 @@ class UserProfileSchema(BaseModel):
     last_login: Optional[datetime] = None
     is_active: bool = True
     is_staff: bool = False
+    questions: List["QuestionListSchema"] = Field(default_factory=list)
     
     class Config:
         from_attributes = True

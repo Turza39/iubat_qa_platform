@@ -2,14 +2,18 @@
 User endpoints for registration, authentication, profile, and verification.
 """
 from fastapi import APIRouter, HTTPException, status, Depends, File, UploadFile
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import func
 from typing import Optional
 import os
 from datetime import datetime
 
 from database import get_db
 from models.user import User, VerificationRequest
+from models.question import Question
+from models.answer import Answer
+from models.vote import Vote
 from schemas.user import (
     RegisterSchema,
     LoginSchema,
@@ -29,6 +33,8 @@ from dependencies.auth import (
 )
 from utils.password import hash_password, verify_password
 from config import settings
+from utils.redis_cache import get_cached_json, set_cached_json
+from utils.tasks import send_welcome_email, process_verification_request
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -107,6 +113,9 @@ async def register(
         # Auto-login: Generate tokens for the new user
         tokens = create_tokens(user.id)
         print(f"✅ Auto-login: Generated JWT token for user '{user.username}'")
+
+        # Send welcome email asynchronously without blocking registration
+        send_welcome_email.delay(user.email, user.username)
         
         return TokenSchema(**tokens)
     except IntegrityError as e:
@@ -201,16 +210,77 @@ async def get_profile(
     """
     try:
         print(f"✅ Profile endpoint called for user: {current_user.username} (ID: {current_user.id})")
-        
-        # Refresh user data from database
-        db.refresh(current_user)
-        print(f"✅ User refreshed from database")
-        
-        # Convert to schema
-        user_data = UserProfileSchema.from_orm(current_user)
-        print(f"✅ User converted to schema successfully")
-        
-        return user_data
+
+        user = (
+            db.query(User)
+            .options(
+                selectinload(User.questions).selectinload(Question.tags)
+            )
+            .filter(User.id == current_user.id)
+            .first()
+        )
+
+        if user is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        question_ids = [question.id for question in user.questions]
+        vote_counts = {}
+        answer_counts = {}
+
+        if question_ids:
+            vote_rows = (
+                db.query(Vote.question_id, func.count(Vote.id))
+                .filter(Vote.question_id.in_(question_ids))
+                .group_by(Vote.question_id)
+                .all()
+            )
+            vote_counts = {question_id: count for question_id, count in vote_rows}
+
+            answer_rows = (
+                db.query(Answer.question_id, func.count(Answer.id))
+                .filter(Answer.question_id.in_(question_ids))
+                .group_by(Answer.question_id)
+                .all()
+            )
+            answer_counts = {question_id: count for question_id, count in answer_rows}
+
+        questions_data = []
+        for question in user.questions:
+            questions_data.append({
+                "id": question.id,
+                "title": question.title,
+                "author": {
+                    "id": question.author.id,
+                    "username": question.author.username,
+                    "verification_status": question.author.verification_status,
+                },
+                "tags": [
+                    {"id": tag.id, "name": tag.name, "slug": tag.slug}
+                    for tag in question.tags
+                ],
+                "upvote_count": vote_counts.get(question.id, 0),
+                "answer_count": answer_counts.get(question.id, 0),
+                "created_at": question.created_at,
+            })
+
+        user_data = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "is_verified": user.is_verified,
+            "verification_status": user.verification_status,
+            "date_joined": user.date_joined,
+            "last_login": user.last_login,
+            "is_active": user.is_active,
+            "is_staff": user.is_staff,
+            "questions": questions_data,
+        }
+
+        print(f"✅ Profile loaded with {len(questions_data)} questions")
+        return UserProfileSchema.model_validate(user_data)
     except Exception as e:
         print(f"❌ Error in profile endpoint: {type(e).__name__}: {str(e)}")
         import traceback
@@ -444,6 +514,8 @@ async def submit_verification(
         
         db.commit()
         db.refresh(verification)
+
+        process_verification_request.delay(current_user.id, verification.id)
         
         return {
             "message": "Verification request submitted successfully",
@@ -486,6 +558,11 @@ async def get_user_public(
     **Parameters:**
     - user_id: The user's ID
     """
+    cache_key = f"user:public:{user_id}"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
+
     user = db.query(User).filter(User.id == user_id).first()
     
     if not user:
@@ -494,4 +571,6 @@ async def get_user_public(
             detail="User not found"
         )
     
-    return UserPublicSchema.from_orm(user)
+    response = UserPublicSchema.from_orm(user).dict()
+    await set_cached_json(cache_key, response, settings.CACHE_TTL_USER_PUBLIC)
+    return response

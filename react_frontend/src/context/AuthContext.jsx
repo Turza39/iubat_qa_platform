@@ -11,28 +11,27 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     initializeAuth()
   }, [])
-
-  const initializeAuth = () => {
+  const initializeAuth = async () => {
     try {
       const token = localStorage.getItem('access_token')
       console.log('🔍 Initializing auth, token exists:', !!token)
-      
+
       if (token) {
         try {
           const decoded = jwtDecode(token)
           console.log('✅ Token decoded successfully, user_id:', decoded.sub)
-          
+
           // Check if token is expired
           const expiresAt = new Date(decoded.exp * 1000)
           const isExpired = decoded.exp * 1000 < Date.now()
           console.log(`Token expires at: ${expiresAt}, Expired: ${isExpired}`)
-          
+
           if (isExpired) {
             console.log('⏰ Token is expired, logging out')
             logout()
           } else {
             console.log('✅ Token is valid, loading user profile')
-            loadUserProfile()
+            await loadUserProfile()
           }
         } catch (decodeError) {
           console.error('❌ Failed to decode token:', decodeError)

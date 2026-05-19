@@ -1,8 +1,10 @@
 from pydantic import BaseModel, Field
 from datetime import datetime
-from typing import Optional, List
-from schemas.user import UserPublicSchema
+from typing import Optional, List, TYPE_CHECKING
 from schemas.tag import TagSchema
+
+if TYPE_CHECKING:
+    from schemas.user import UserPublicSchema
 
 
 class QuestionListSchema(BaseModel):
@@ -13,7 +15,7 @@ class QuestionListSchema(BaseModel):
     """
     id: int
     title: str
-    author: UserPublicSchema
+    author: "UserPublicSchema"
     tags: List[TagSchema]
     upvote_count: int
     answer_count: int
@@ -32,7 +34,7 @@ class QuestionDetailSchema(BaseModel):
     id: int
     title: str
     body: str
-    author: UserPublicSchema
+    author: "UserPublicSchema"
     tags: List[TagSchema]
     upvote_count: int
     answer_count: int

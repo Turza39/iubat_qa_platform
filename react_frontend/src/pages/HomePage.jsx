@@ -29,6 +29,9 @@ export default function HomePage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedTag, setSelectedTag] = useState('')
   const [sortBy, setSortBy] = useState('newest')
+  const [page, setPage] = useState(0)
+  const [hasMore, setHasMore] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [votingId, setVotingId] = useState(null)
 
   useEffect(() => {
@@ -36,18 +39,38 @@ export default function HomePage() {
   }, [])
 
   useEffect(() => {
-    fetchQuestions()
+    setPage(0)
   }, [searchQuery, selectedTag])
 
-  const fetchQuestions = async () => {
+  useEffect(() => {
+    fetchQuestions(page)
+  }, [searchQuery, selectedTag, page])
+
+  const fetchQuestions = async (pageToFetch) => {
+    const limit = 20
+    const skip = pageToFetch * limit
+
     try {
-      setLoading(true)
-      const data = await questionService.getAllQuestions(searchQuery, selectedTag)
-      setQuestions(data)
+      if (pageToFetch === 0) {
+        setLoading(true)
+      } else {
+        setLoadingMore(true)
+      }
+
+      const data = await questionService.getAllQuestions(searchQuery, selectedTag, skip, limit)
+
+      if (pageToFetch === 0) {
+        setQuestions(data)
+      } else {
+        setQuestions(prev => [...prev, ...data])
+      }
+
+      setHasMore(data.length === limit)
     } catch (error) {
       toast.error('Failed to load questions.')
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
@@ -338,6 +361,19 @@ export default function HomePage() {
                   </div>
                 </div>
               ))}
+
+              {hasMore && (
+                <div className="flex justify-center mt-4">
+                  <Button
+                    variant="outline"
+                    size="md"
+                    onClick={() => setPage(prev => prev + 1)}
+                    disabled={loadingMore}
+                  >
+                    {loadingMore ? 'Loading...' : 'Load more questions'}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>

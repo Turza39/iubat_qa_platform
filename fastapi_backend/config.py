@@ -46,6 +46,26 @@ class Settings(BaseSettings):
     # Static Files
     STATIC_URL: str = "/static/"
     STATIC_ROOT: str = "./static"
+
+    # Redis & Cache
+    REDIS_URL: str = "redis://localhost:6379/0"
+    CACHE_TTL_QUESTION_LIST: int = 30
+    CACHE_TTL_QUESTION_DETAIL: int = 60
+    CACHE_TTL_TAGS: int = 300
+    CACHE_TTL_ANSWER_LIST: int = 30
+    CACHE_TTL_VOTE_STATS: int = 15
+    CACHE_TTL_USER_PUBLIC: int = 60
+
+    # Celery
+    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    # Email / SMTP (optional)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = "no-reply@iubatqa.local"
     
     # Timezone
     TIMEZONE: str = "Asia/Dhaka"

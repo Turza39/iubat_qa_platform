@@ -12,6 +12,9 @@ from models.answer import Answer
 from models.vote import Vote
 from schemas.vote import VoteSchema, VoteToggleResponseSchema, VoteStatsSchema
 from dependencies.auth import get_current_user
+from config import settings
+from utils.redis_cache import get_cached_json, set_cached_json, delete_pattern
+from utils.tasks import publish_activity_event
 
 router = APIRouter(prefix="/api/votes", tags=["votes"])
 
@@ -84,6 +87,15 @@ async def toggle_question_vote(
             Vote.question_id == question_id
         ).scalar() or 0
         
+        await delete_pattern("questions:list:*")
+        await delete_pattern("question:detail:*")
+        await delete_pattern("votes:stats")
+        publish_activity_event.delay("question.vote.toggled", {
+            "question_id": question_id,
+            "user_id": current_user.id,
+            "action": "removed",
+        })
+
         return VoteToggleResponseSchema(
             message="Vote removed",
             upvote_count=upvote_count,
@@ -103,6 +115,15 @@ async def toggle_question_vote(
             Vote.question_id == question_id
         ).scalar() or 0
         
+        await delete_pattern("questions:list:*")
+        await delete_pattern("question:detail:*")
+        await delete_pattern("votes:stats")
+        publish_activity_event.delay("question.vote.toggled", {
+            "question_id": question_id,
+            "user_id": current_user.id,
+            "action": "added",
+        })
+
         return VoteToggleResponseSchema(
             message="Vote added",
             upvote_count=upvote_count,
@@ -178,6 +199,15 @@ async def toggle_answer_vote(
             Vote.answer_id == answer_id
         ).scalar() or 0
         
+        await delete_pattern("answers:list:*")
+        await delete_pattern("question:detail:*")
+        await delete_pattern("votes:stats")
+        publish_activity_event.delay("answer.vote.toggled", {
+            "answer_id": answer_id,
+            "user_id": current_user.id,
+            "action": "removed",
+        })
+        
         return VoteToggleResponseSchema(
             message="Vote removed",
             upvote_count=upvote_count,
@@ -196,6 +226,15 @@ async def toggle_answer_vote(
         upvote_count = db.query(func.count(Vote.id)).filter(
             Vote.answer_id == answer_id
         ).scalar() or 0
+        
+        await delete_pattern("answers:list:*")
+        await delete_pattern("question:detail:*")
+        await delete_pattern("votes:stats")
+        publish_activity_event.delay("answer.vote.toggled", {
+            "answer_id": answer_id,
+            "user_id": current_user.id,
+            "action": "added",
+        })
         
         return VoteToggleResponseSchema(
             message="Vote added",
@@ -225,6 +264,11 @@ async def get_vote_stats(db: Session = Depends(get_db)):
     - total_question_votes: Total votes on questions
     - total_answer_votes: Total votes on answers
     """
+    cache_key = "votes:stats"
+    cached = await get_cached_json(cache_key)
+    if cached is not None:
+        return cached
+
     total_votes = db.query(func.count(Vote.id)).scalar() or 0
     
     total_question_votes = db.query(func.count(Vote.id)).filter(
@@ -235,11 +279,13 @@ async def get_vote_stats(db: Session = Depends(get_db)):
         Vote.answer_id.isnot(None)
     ).scalar() or 0
     
-    return VoteStatsSchema(
+    response = VoteStatsSchema(
         total_votes=total_votes,
         total_question_votes=total_question_votes,
         total_answer_votes=total_answer_votes
     )
+    await set_cached_json(cache_key, response.dict(), settings.CACHE_TTL_VOTE_STATS)
+    return response
 
 
 # ============================================================================
