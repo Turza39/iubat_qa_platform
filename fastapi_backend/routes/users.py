@@ -36,6 +36,7 @@ from utils.password import hash_password, verify_password
 from config import settings
 from utils.redis_cache import get_cached_json, set_cached_json
 from utils.tasks import send_welcome_email, process_verification_request
+from utils.supabase_utils import upload_to_supabase, delete_from_supabase, is_supabase_configured
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
@@ -115,8 +116,8 @@ async def register(
         tokens = create_tokens(user.id)
         print(f"✅ Auto-login: Generated JWT token for user '{user.username}'")
 
-        # Send welcome email asynchronously without blocking registration
-        send_welcome_email.delay(user.email, user.username)
+        # Email service disabled - no welcome email
+        # send_welcome_email.delay(user.email, user.username)
         
         return TokenSchema(**tokens)
     except IntegrityError as e:
@@ -512,18 +513,28 @@ async def submit_verification(
         )
     
     try:
-        # Create media directory if it doesn't exist
-        media_dir = os.path.join(settings.MEDIA_ROOT, "verification_images")
-        os.makedirs(media_dir, exist_ok=True)
-        
-        # Sanitize filename and save file
-        # Keep only safe characters in filename to avoid path injection
-        safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename))
-        timestamp = int(datetime.utcnow().timestamp())
-        file_path = os.path.join(media_dir, f"{current_user.id}_{timestamp}_{safe_name}")
+        # Check if Supabase is configured
+        if is_supabase_configured():
+            # Upload to Supabase
+            file_url = await upload_to_supabase(
+                file_content=contents,
+                filename=filename,
+                content_type=upload_file.content_type,
+                folder=f"user_{current_user.id}"
+            )
+            image_path = file_url
+        else:
+            # Fallback to local file storage
+            media_dir = os.path.join(settings.MEDIA_ROOT, "verification_images")
+            os.makedirs(media_dir, exist_ok=True)
+            
+            safe_name = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(filename))
+            timestamp = int(datetime.utcnow().timestamp())
+            file_path = os.path.join(media_dir, f"{current_user.id}_{timestamp}_{safe_name}")
 
-        with open(file_path, "wb") as f:
-            f.write(contents)
+            with open(file_path, "wb") as f:
+                f.write(contents)
+            image_path = file_path
         
         # Create or update verification request using SQLAlchemy
         verification = db.query(VerificationRequest).filter(
@@ -531,15 +542,22 @@ async def submit_verification(
         ).first()
         
         if verification:
+            # Delete old file from Supabase if exists
+            if is_supabase_configured() and verification.image_path:
+                try:
+                    await delete_from_supabase(verification.image_path)
+                except Exception:
+                    pass  # Ignore deletion errors
+            
             # Update existing verification request
-            verification.image_path = file_path
+            verification.image_path = image_path
             verification.status = "pending"
             verification.submitted_at = datetime.utcnow()
         else:
             # Create new verification request
             verification = VerificationRequest(
                 user_id=current_user.id,
-                image_path=file_path,
+                image_path=image_path,
                 status="pending",
             )
             db.add(verification)

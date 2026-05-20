@@ -1,61 +1,60 @@
-import json
-
-from pydantic import field_validator
 from pydantic_settings import BaseSettings
-from typing import Optional
-from datetime import timedelta
+from typing import List, Optional
 
 
 class Settings(BaseSettings):
-    # Database Configuration
-    # Support both PostgreSQL and SQLite
-    DB_ENGINE: str = "postgresql"  # 'postgresql' or 'sqlite'
-    DB_NAME: Optional[str] = None
-    DB_USER: Optional[str] = None
-    DB_PASSWORD: Optional[str] = None
-    DB_HOST: Optional[str] = None
-    DB_PORT: Optional[int] = None
-    
-    # For SQLite (development)
-    SQLITE_URL: str = "sqlite:///./iubat_qa.db"
-    
-    # JWT Configuration
-    SECRET_KEY: str 
+    # =========================
+    # DATABASE
+    # =========================
+    DATABASE_URL: str
+
+    # =========================
+    # SECURITY
+    # =========================
+    SECRET_KEY: str = "secret"
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 24 * 60  # 24 hours
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    
+
     @property
     def ACCESS_TOKEN_EXPIRE_SECONDS(self) -> int:
-        """Convert minutes to seconds for token expiration"""
         return self.ACCESS_TOKEN_EXPIRE_MINUTES * 60
-    
-    # App Configuration
+
+    # =========================
+    # APP
+    # =========================
     DEBUG: bool = False
-    ALLOWED_HOSTS: list = ["localhost", "127.0.0.1"]
-    
-    # CORS Configuration
-    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5173,http://127.0.0.1:5173"
+    TIMEZONE: str = "UTC"
 
-    @property
-    def CORS_ALLOWED_ORIGINS_LIST(self) -> list[str]:
-        raw_value = self.CORS_ALLOWED_ORIGINS
-        if isinstance(raw_value, str):
-            return [item.strip() for item in raw_value.split(",") if item.strip()]
-        if isinstance(raw_value, list):
-            return [str(item) for item in raw_value]
-        return []
-    
-    # Media Files
-    MEDIA_URL: str = "/media/"
-    MEDIA_ROOT: str = "./media"
-    
-    # Static Files
-    STATIC_URL: str = "/static/"
-    STATIC_ROOT: str = "./static"
+    # CORS (comma-separated string → list)
+    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000"
 
-    # Redis & Cache
-    REDIS_URL: str = "redis://localhost:6379/0"
+    # =========================
+    # REDIS / CELERY
+    # =========================
+    REDIS_URL: Optional[str] = "redis://localhost:6379/0"
+    REDIS_SSL: bool = False
+    CELERY_BROKER_URL: Optional[str] = "redis://localhost:6379/1"
+    CELERY_RESULT_BACKEND: Optional[str] = "redis://localhost:6379/2"
+
+    # =========================
+    # SUPABASE (Optional - for file storage)
+    # =========================
+    SUPABASE_URL: Optional[str] = ""
+    SUPABASE_ACCESS_KEY: Optional[str] = ""
+    SUPABASE_SECRET_KEY: Optional[str] = ""
+    SUPABASE_BUCKET: Optional[str] = "verification-images"
+
+    # =========================
+    # RATE LIMIT
+    # =========================
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_REQUESTS: int = 60
+    RATE_LIMIT_WINDOW: int = 60
+
+    # =========================
+    # CACHE TTL (seconds)
+    # =========================
     CACHE_TTL_QUESTION_LIST: int = 30
     CACHE_TTL_QUESTION_DETAIL: int = 60
     CACHE_TTL_TAGS: int = 300
@@ -63,33 +62,19 @@ class Settings(BaseSettings):
     CACHE_TTL_VOTE_STATS: int = 15
     CACHE_TTL_USER_PUBLIC: int = 60
 
-    # Celery
-    CELERY_BROKER_URL: str = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+    class Config:
+        env_file = ".env"
 
-    # Email / SMTP (optional)
-    SMTP_HOST: str = ""
-    SMTP_PORT: int = 587
-    SMTP_USERNAME: str = ""
-    SMTP_PASSWORD: str = ""
-    SMTP_FROM_EMAIL: str = "no-reply@iubatqa.local"
-    
-    # Timezone
-    TIMEZONE: str = "Asia/Dhaka"
-
-    model_config = {
-        "env_parse_json": False,
-        "env_file": ".env",
-        "env_file_encoding": "utf-8",
-    }
-
+    # -------------------------
+    # Helpers (IMPORTANT FIX)
+    # -------------------------
     @property
-    def DATABASE_URL(self) -> str:
-        """Construct database URL based on configuration"""
-        if self.DB_ENGINE == "postgresql":
-            return f"postgresql://{self.DB_USER}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}"
-        else:
-            return self.SQLITE_URL
+    def CORS_ALLOWED_ORIGINS_LIST(self) -> List[str]:
+        return [
+            origin.strip()
+            for origin in self.CORS_ALLOWED_ORIGINS.split(",")
+            if origin.strip()
+        ]
 
 
 settings = Settings()

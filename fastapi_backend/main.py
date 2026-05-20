@@ -1,23 +1,20 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.exc import SQLAlchemyError
-from database import Base, engine, SessionLocal
+from sqlalchemy.orm import Session
+
+from database import SessionLocal
 from routes import answers_router, questions_router, users_router, votes_router
-from models import User, Question, Answer, Vote, Tag, VerificationRequest
+from models import Tag
 from config import settings
 from utils.redis_cache import get_async_redis
+from utils.rate_limit import RateLimitMiddleware
 import os
 
-# Create all database tables safely on startup
-try:
-    Base.metadata.create_all(bind=engine, checkfirst=True)
-except SQLAlchemyError as exc:
-    # Existing schema or partial migration state may already exist.
-    # Skip table creation and rely on migrations / existing database schema.
-    print("Skipping automatic table creation due to database schema state:", exc)
 
-
+# =========================
+# SEED FUNCTION (SAFE VERSION)
+# =========================
 def seed_default_tags():
     default_tags = [
         {"name": "python", "slug": "python"},
@@ -34,18 +31,28 @@ def seed_default_tags():
 
     try:
         with SessionLocal() as session:
-            existing = {tag.slug for tag in session.query(Tag.slug).all()}
-            new_tags = [Tag(name=item["name"], slug=item["slug"]) for item in default_tags if item["slug"] not in existing]
+            existing = {
+                row[0] for row in session.query(Tag.slug).all()
+            }
+
+            new_tags = [
+                Tag(name=t["name"], slug=t["slug"])
+                for t in default_tags
+                if t["slug"] not in existing
+            ]
+
             if new_tags:
                 session.add_all(new_tags)
                 session.commit()
                 print(f"✅ Seeded {len(new_tags)} default tags")
+
     except Exception as exc:
-        print("Failed to seed default tags:", exc)
+        print("⚠️ Tag seeding skipped:", exc)
 
 
-seed_default_tags()
-
+# =========================
+# FASTAPI APP
+# =========================
 app = FastAPI(
     title="IUBAT QA Platform API",
     description="FastAPI backend for IUBAT QA Platform",
@@ -53,7 +60,7 @@ app = FastAPI(
     debug=settings.DEBUG
 )
 
-# Configure CORS
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ALLOWED_ORIGINS_LIST,
@@ -62,33 +69,41 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create media directory if it doesn't exist (used for uploads)
-os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+# Rate limiting
+app.add_middleware(RateLimitMiddleware)
 
-# Mount media files (verification uploads and other user media)
-app.mount("/media", StaticFiles(directory=settings.MEDIA_ROOT), name="media")
+# Media folder
+# os.makedirs(settings.MEDIA_ROOT, exist_ok=True)
+# app.mount("/media", StaticFiles(directory=settings.MEDIA_ROOT), name="media")
 
 
+# =========================
+# STARTUP EVENT
+# =========================
 @app.on_event("startup")
 async def startup():
+    # Redis health check (non-blocking)
     try:
         redis_client = await get_async_redis()
         await redis_client.ping()
     except Exception:
-        # Allow the app to start even if Redis is temporarily unavailable.
-        # Startup will log the failure via the worker / API logs.
-        pass
+        print("⚠️ Redis not available at startup (continuing anyway)")
 
-# Include routers
+
+# =========================
+# ROUTES
+# =========================
 app.include_router(users_router)
 app.include_router(answers_router)
 app.include_router(questions_router)
 app.include_router(votes_router)
 
 
+# =========================
+# ROOT
+# =========================
 @app.get("/")
 async def root():
-    """Root endpoint"""
     return {
         "message": "IUBAT QA Platform API",
         "version": "1.0.0",
@@ -99,14 +114,16 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint"""
     return {
         "status": "healthy",
-        "database": "connected",
+        "database": "managed_by_alembic",
         "timezone": settings.TIMEZONE
     }
 
 
+# =========================
+# DEV RUN
+# =========================
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
