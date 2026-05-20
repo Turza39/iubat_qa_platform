@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     # =========================
     # SECURITY
     # =========================
-    SECRET_KEY: str = "secret"
-    ALGORITHM: str = "HS256"
+    SECRET_KEY: str 
+    ALGORITHM: str 
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
@@ -24,26 +24,26 @@ class Settings(BaseSettings):
     # APP
     # =========================
     DEBUG: bool = False
-    TIMEZONE: str = "UTC"
+    TIMEZONE: str
 
     # CORS (comma-separated string → list)
-    CORS_ALLOWED_ORIGINS: str = "http://localhost:3000"
+    CORS_ALLOWED_ORIGINS: str
 
     # =========================
     # REDIS / CELERY
     # =========================
-    REDIS_URL: Optional[str] = "redis://localhost:6379/0"
+    REDIS_URL: Optional[str]
     REDIS_SSL: bool = False
-    CELERY_BROKER_URL: Optional[str] = "redis://localhost:6379/1"
-    CELERY_RESULT_BACKEND: Optional[str] = "redis://localhost:6379/2"
+    CELERY_BROKER_URL: Optional[str]
+    CELERY_RESULT_BACKEND: Optional[str]
 
     # =========================
     # SUPABASE (Optional - for file storage)
     # =========================
-    SUPABASE_URL: Optional[str] = ""
-    SUPABASE_ACCESS_KEY: Optional[str] = ""
-    SUPABASE_SECRET_KEY: Optional[str] = ""
-    SUPABASE_BUCKET: Optional[str] = "verification-images"
+    SUPABASE_URL: Optional[str]
+    SUPABASE_ACCESS_KEY: Optional[str]
+    SUPABASE_SECRET_KEY: Optional[str] 
+    SUPABASE_BUCKET: Optional[str] 
 
     # =========================
     # RATE LIMIT
